@@ -19,7 +19,7 @@ CORS(app)
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
 if not YOUTUBE_API_KEY:
     raise ValueError("Missing YOUTUBE_API_KEY in .env")
@@ -256,8 +256,11 @@ def extract_json_from_text(text):
 
 def generate_ai_analysis(all_data, company_name):
     """Use Gemini to generate deep insights."""
-    summary_data = []
 
+    print("Gemini key present:", bool(GEMINI_API_KEY))
+    print("Gemini model:", GEMINI_MODEL)
+
+    summary_data = []
     for d in all_data:
         if "error" not in d:
             top_titles = [v["title"] for v in d.get("top_videos", [])[:5]]
@@ -280,7 +283,7 @@ Analyze this YouTube data for {company_name} and its competitors.
 DATA:
 {json.dumps(summary_data, indent=2)}
 
-Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON that matches this structure:
 {{
   "executive_summary": "3-4 sentences on who leads in video marketing and why",
   "leader": "name of company leading in video marketing",
@@ -317,13 +320,87 @@ Rules:
 - No markdown
 """
 
+    response_schema = {
+        "type": "object",
+        "properties": {
+            "executive_summary": {"type": "string"},
+            "leader": {"type": "string"},
+            "leader_reason": {"type": "string"},
+            "content_themes": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                }
+            },
+            "content_gaps": {
+                "type": "array",
+                "items": {"type": "string"}
+            },
+            "posting_insight": {"type": "string"},
+            "engagement_insight": {"type": "string"},
+            "recommendations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "detail": {"type": "string"}
+                    },
+                    "required": ["title", "detail"]
+                }
+            },
+            "company_scores": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                        "content_quality": {"type": "number"},
+                        "consistency": {"type": "number"},
+                        "engagement": {"type": "number"},
+                        "growth_potential": {"type": "number"},
+                        "overall": {"type": "number"}
+                    },
+                    "required": [
+                        "content_quality",
+                        "consistency",
+                        "engagement",
+                        "growth_potential",
+                        "overall"
+                    ]
+                }
+            },
+            "rankings": {
+                "type": "array",
+                "items": {"type": "string"}
+            },
+            "missing_formats": {
+                "type": "array",
+                "items": {"type": "string"}
+            }
+        },
+        "required": [
+            "executive_summary",
+            "leader",
+            "leader_reason",
+            "content_themes",
+            "content_gaps",
+            "posting_insight",
+            "engagement_insight",
+            "recommendations",
+            "company_scores",
+            "rankings",
+            "missing_formats"
+        ],
+        "additionalProperties": False
+    }
+
     client = genai.Client(api_key=GEMINI_API_KEY)
 
     candidate_models = [
         GEMINI_MODEL,
         "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-1.5-flash"
+        "gemini-2.0-flash-lite"
     ]
 
     last_error = None
@@ -332,55 +409,42 @@ Rules:
         try:
             response = client.models.generate_content(
                 model=model_name,
-                contents=prompt
+                contents=prompt,
+                config={
+                    "response_mime_type": "application/json",
+                    "response_schema": response_schema,
+                    "temperature": 0.2,
+                    "max_output_tokens": 2048,
+                }
             )
+
             text = (response.text or "").strip()
-            return extract_json_from_text(text)
+            if not text:
+                raise ValueError("Gemini returned empty text")
+
+            return json.loads(text)
+
         except Exception as e:
             last_error = e
-            continue
-
-    # Fallback if Gemini fails
-    print("Gemini error:", last_error)
-    fallback_rankings = [d["company"] for d in all_data if "error" not in d]
+            print(f"Gemini failed with model {model_name}: {e}")
 
     return {
-        "executive_summary": "AI analysis unavailable. The report below is based on the raw metrics collected from YouTube.",
+        "executive_summary": f"AI analysis unavailable: {last_error}",
         "leader": all_data[0]["company"] if all_data else company_name,
-        "leader_reason": "Fallback analysis used because Gemini could not generate a response.",
+        "leader_reason": "Fallback analysis used because Gemini could not generate a valid response.",
         "content_themes": {},
-        "content_gaps": [
-            "Short-form content",
-            "Behind-the-scenes content",
-            "Customer stories",
-            "Live streams"
-        ],
-        "posting_insight": "Consistent posting usually improves visibility and audience recall.",
-        "engagement_insight": "Educational and practical videos often receive stronger engagement.",
+        "content_gaps": ["Short-form content", "Behind the scenes", "Customer stories", "Live streams"],
+        "posting_insight": "Consistent posting drives better channel visibility.",
+        "engagement_insight": "Educational content often performs well in B2B video marketing.",
         "recommendations": [
-            {
-                "title": "Increase posting frequency",
-                "detail": "Publish at least 2 times per week to stay visible and build consistency."
-            },
-            {
-                "title": "Add Shorts",
-                "detail": "Use YouTube Shorts to improve discovery and attract new viewers."
-            },
-            {
-                "title": "Publish case studies",
-                "detail": "Customer stories build trust and often perform well with B2B audiences."
-            },
-            {
-                "title": "Improve thumbnails",
-                "detail": "Test thumbnail styles to improve click-through rate."
-            },
-            {
-                "title": "Engage in comments",
-                "detail": "Reply to viewers to strengthen community signals and engagement."
-            }
+            {"title": "Increase posting frequency", "detail": "Post at least 2x per week to grow faster."},
+            {"title": "Add Shorts", "detail": "YouTube Shorts drive discovery."},
+            {"title": "Customer case studies", "detail": "Real customer stories often perform well."},
+            {"title": "Improve thumbnails", "detail": "A/B test thumbnail designs."},
+            {"title": "Engage in comments", "detail": "Reply to comments to boost engagement signals."}
         ],
         "company_scores": {},
-        "rankings": fallback_rankings,
+        "rankings": [d["company"] for d in all_data if "error" not in d],
         "missing_formats": ["Shorts", "Live streams", "Webinars"]
     }
 
