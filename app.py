@@ -283,7 +283,7 @@ Analyze this YouTube data for {company_name} and its competitors.
 DATA:
 {json.dumps(summary_data, indent=2)}
 
-Return ONLY valid JSON that matches this structure:
+Return ONLY valid JSON with this structure:
 {{
   "executive_summary": "3-4 sentences on who leads in video marketing and why",
   "leader": "name of company leading in video marketing",
@@ -320,6 +320,36 @@ Rules:
 - No markdown
 """
 
+    # Build schema dynamically without additionalProperties
+    theme_properties = {}
+    score_properties = {}
+
+    for item in summary_data:
+        company_key = item["company"]
+
+        theme_properties[company_key] = {
+            "type": "array",
+            "items": {"type": "string"}
+        }
+
+        score_properties[company_key] = {
+            "type": "object",
+            "properties": {
+                "content_quality": {"type": "number"},
+                "consistency": {"type": "number"},
+                "engagement": {"type": "number"},
+                "growth_potential": {"type": "number"},
+                "overall": {"type": "number"}
+            },
+            "required": [
+                "content_quality",
+                "consistency",
+                "engagement",
+                "growth_potential",
+                "overall"
+            ]
+        }
+
     response_schema = {
         "type": "object",
         "properties": {
@@ -328,10 +358,7 @@ Rules:
             "leader_reason": {"type": "string"},
             "content_themes": {
                 "type": "object",
-                "additionalProperties": {
-                    "type": "array",
-                    "items": {"type": "string"}
-                }
+                "properties": theme_properties
             },
             "content_gaps": {
                 "type": "array",
@@ -352,23 +379,7 @@ Rules:
             },
             "company_scores": {
                 "type": "object",
-                "additionalProperties": {
-                    "type": "object",
-                    "properties": {
-                        "content_quality": {"type": "number"},
-                        "consistency": {"type": "number"},
-                        "engagement": {"type": "number"},
-                        "growth_potential": {"type": "number"},
-                        "overall": {"type": "number"}
-                    },
-                    "required": [
-                        "content_quality",
-                        "consistency",
-                        "engagement",
-                        "growth_potential",
-                        "overall"
-                    ]
-                }
+                "properties": score_properties
             },
             "rankings": {
                 "type": "array",
@@ -391,8 +402,7 @@ Rules:
             "company_scores",
             "rankings",
             "missing_formats"
-        ],
-        "additionalProperties": False
+        ]
     }
 
     client = genai.Client(api_key=GEMINI_API_KEY)
@@ -421,6 +431,10 @@ Rules:
             text = (response.text or "").strip()
             if not text:
                 raise ValueError("Gemini returned empty text")
+
+            text = re.sub(r"^```json\s*", "", text)
+            text = re.sub(r"^```\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
 
             return json.loads(text)
 
