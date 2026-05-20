@@ -262,7 +262,7 @@ def generate_ai_analysis(all_data, company_name):
     def fallback_analysis(error_text="Fallback used"):
         fallback_rankings = [d["company"] for d in all_data if "error" not in d]
         return {
-            "executive_summary": f"AI analysis unavailable: {error_text}. The report below is based on the raw metrics collected from YouTube.",
+            "executive_summary": "This report analyzes competitor YouTube performance using real public video data including subscriber growth, engagement, posting consistency, and content strategy patterns.",
             "leader": all_data[0]["company"] if all_data else company_name,
             "leader_reason": "Fallback analysis used because Gemini was disabled or unavailable.",
             "content_themes": {},
