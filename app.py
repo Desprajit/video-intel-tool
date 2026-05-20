@@ -236,11 +236,11 @@ Provide a detailed analysis in this EXACT JSON format (no markdown, pure JSON):
   "missing_formats": ["format1", "format2", "format3"]
 }}
 
-Make 5 specific recommendations. Score all companies out of 10. Be analytical and specific."""
-
+Make 5 recommendations. Score companies out of 10. Be concise."""
+    
     client = genai.Client(api_key=GEMINI_API_KEY)
     response = client.models.generate_content(
-    model="gemini-2.0-flash",
+    model="gemini-1.5-flash-8b",
     contents=prompt
 )
 
