@@ -1,14 +1,16 @@
 import os
 import json
 import re
+import tempfile
+from datetime import datetime
+
 from flask import Flask, request, jsonify, render_template, send_file
 from flask_cors import CORS
 from googleapiclient.discovery import build
 from google import genai
-from google.genai import types
 from dotenv import load_dotenv
+
 from pptx_builder import build_pptx
-import tempfile
 
 load_dotenv()
 
@@ -17,30 +19,47 @@ CORS(app)
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+if not YOUTUBE_API_KEY:
+    raise ValueError("Missing YOUTUBE_API_KEY in .env")
+if not GEMINI_API_KEY:
+    raise ValueError("Missing GEMINI_API_KEY in .env")
 
 
 def get_youtube_service():
     return build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
+
+def safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def search_channel(youtube, company_name):
     """Search for a company's YouTube channel."""
     response = youtube.search().list(
-        q=company_name + " official",
+        q=f"{company_name} official",
         type="channel",
         part="snippet",
-        maxResults=3
+        maxResults=5
     ).execute()
 
-    if not response.get("items"):
+    items = response.get("items", [])
+    if not items:
         return None
 
-    # Pick the best match
-    for item in response["items"]:
-        title = item["snippet"]["title"].lower()
-        if company_name.lower() in title or any(w in title for w in company_name.lower().split()):
-            return item["snippet"]["channelId"]
+    company_lower = company_name.lower()
 
-    return response["items"][0]["snippet"]["channelId"]
+    for item in items:
+        title = item.get("snippet", {}).get("title", "").lower()
+        if company_lower in title or any(word in title for word in company_lower.split()):
+            return item.get("snippet", {}).get("channelId")
+
+    return items[0].get("snippet", {}).get("channelId")
+
 
 def get_channel_stats(youtube, channel_id):
     """Get channel statistics."""
@@ -49,41 +68,53 @@ def get_channel_stats(youtube, channel_id):
         id=channel_id
     ).execute()
 
-    if not response.get("items"):
+    items = response.get("items", [])
+    if not items:
         return {}
 
-    item = response["items"][0]
+    item = items[0]
     stats = item.get("statistics", {})
     snippet = item.get("snippet", {})
+    content_details = item.get("contentDetails", {})
+    uploads_playlist = (
+        content_details.get("relatedPlaylists", {})
+        .get("uploads", "")
+    )
 
     return {
         "channel_id": channel_id,
         "channel_name": snippet.get("title", "Unknown"),
         "description": snippet.get("description", "")[:300],
-        "subscriber_count": int(stats.get("subscriberCount", 0)),
-        "video_count": int(stats.get("videoCount", 0)),
-        "view_count": int(stats.get("viewCount", 0)),
+        "subscriber_count": safe_int(stats.get("subscriberCount")),
+        "video_count": safe_int(stats.get("videoCount")),
+        "view_count": safe_int(stats.get("viewCount")),
         "country": snippet.get("country", "N/A"),
         "published_at": snippet.get("publishedAt", "")[:10],
-        "uploads_playlist": item.get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads", "")
+        "uploads_playlist": uploads_playlist
     }
+
 
 def get_recent_videos(youtube, uploads_playlist_id, max_results=20):
     """Get recent videos from a channel."""
     if not uploads_playlist_id:
         return []
 
-    response = youtube.playlistItems().list(
+    playlist_response = youtube.playlistItems().list(
         part="snippet,contentDetails",
         playlistId=uploads_playlist_id,
         maxResults=max_results
     ).execute()
 
-    video_ids = [item["contentDetails"]["videoId"] for item in response.get("items", [])]
+    playlist_items = playlist_response.get("items", [])
+    video_ids = [
+        item.get("contentDetails", {}).get("videoId")
+        for item in playlist_items
+        if item.get("contentDetails", {}).get("videoId")
+    ]
+
     if not video_ids:
         return []
 
-    # Get video stats
     stats_response = youtube.videos().list(
         part="snippet,statistics,contentDetails",
         id=",".join(video_ids)
@@ -95,18 +126,20 @@ def get_recent_videos(youtube, uploads_playlist_id, max_results=20):
         snippet = item.get("snippet", {})
         duration = item.get("contentDetails", {}).get("duration", "PT0S")
 
-        views = int(stats.get("viewCount", 0))
-        likes = int(stats.get("likeCount", 0))
-        comments = int(stats.get("commentCount", 0))
+        views = safe_int(stats.get("viewCount"))
+        likes = safe_int(stats.get("likeCount"))
+        comments = safe_int(stats.get("commentCount"))
+
+        engagement_rate = round(((likes + comments) / views) * 100, 2) if views > 0 else 0
 
         videos.append({
-            "video_id": item["id"],
+            "video_id": item.get("id", ""),
             "title": snippet.get("title", ""),
             "published_at": snippet.get("publishedAt", "")[:10],
             "views": views,
             "likes": likes,
             "comments": comments,
-            "engagement_rate": round((likes + comments) / views * 100, 2) if views > 0 else 0,
+            "engagement_rate": engagement_rate,
             "tags": snippet.get("tags", [])[:5],
             "description": snippet.get("description", "")[:200],
             "thumbnail": snippet.get("thumbnails", {}).get("medium", {}).get("url", ""),
@@ -115,23 +148,31 @@ def get_recent_videos(youtube, uploads_playlist_id, max_results=20):
 
     return sorted(videos, key=lambda x: x["views"], reverse=True)
 
+
 def analyze_posting_frequency(videos):
     """Calculate posting frequency from video dates."""
     if len(videos) < 2:
         return "Insufficient data"
 
-    dates = sorted([v["published_at"] for v in videos if v["published_at"]], reverse=True)
+    dates = [v["published_at"] for v in videos if v.get("published_at")]
     if len(dates) < 2:
         return "Unknown"
 
-    from datetime import datetime
     try:
-        d1 = datetime.strptime(dates[0], "%Y-%m-%d")
-        d2 = datetime.strptime(dates[-1], "%Y-%m-%d")
-        days_span = (d1 - d2).days
+        parsed_dates = sorted(
+            [datetime.strptime(d, "%Y-%m-%d") for d in dates],
+            reverse=True
+        )
+
+        newest = parsed_dates[0]
+        oldest = parsed_dates[-1]
+        days_span = (newest - oldest).days
+
         if days_span == 0:
             return "Multiple per day"
-        videos_per_week = round(len(dates) / (days_span / 7), 1)
+
+        videos_per_week = round(len(parsed_dates) / (days_span / 7), 1)
+
         if videos_per_week >= 7:
             return "Daily"
         elif videos_per_week >= 3:
@@ -139,9 +180,11 @@ def analyze_posting_frequency(videos):
         elif videos_per_week >= 1:
             return f"{videos_per_week} videos/week"
         else:
-            return f"{round(days_span/len(dates))} days between posts"
-    except:
+            days_between = round(days_span / len(parsed_dates))
+            return f"{days_between} days between posts"
+    except Exception:
         return "Unknown"
+
 
 def fetch_company_data(company_name):
     """Fetch all YouTube data for a company."""
@@ -184,9 +227,37 @@ def fetch_company_data(company_name):
         "top_topics": top_topics
     }
 
+
+def extract_json_from_text(text):
+    """Try to extract valid JSON from model output."""
+    if not text:
+        raise ValueError("Empty model response")
+
+    text = text.strip()
+
+    # Remove common markdown fences
+    text = re.sub(r"^```json\s*", "", text)
+    text = re.sub(r"^```\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+
+    # First try direct parsing
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    # Then try to find the first JSON object in the text
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        return json.loads(match.group(0))
+
+    raise ValueError("Could not parse JSON from model response")
+
+
 def generate_ai_analysis(all_data, company_name):
     """Use Gemini to generate deep insights."""
     summary_data = []
+
     for d in all_data:
         if "error" not in d:
             top_titles = [v["title"] for v in d.get("top_videos", [])[:5]]
@@ -201,12 +272,15 @@ def generate_ai_analysis(all_data, company_name):
                 "top_topics": d.get("top_topics", [])
             })
 
-    prompt = f"""You are a senior video marketing strategist. Analyze this YouTube data for {company_name} and its competitors.
+    prompt = f"""
+You are a senior video marketing strategist.
+
+Analyze this YouTube data for {company_name} and its competitors.
 
 DATA:
 {json.dumps(summary_data, indent=2)}
 
-Provide a detailed analysis in this EXACT JSON format (no markdown, pure JSON):
+Return ONLY valid JSON in this exact format:
 {{
   "executive_summary": "3-4 sentences on who leads in video marketing and why",
   "leader": "name of company leading in video marketing",
@@ -236,48 +310,89 @@ Provide a detailed analysis in this EXACT JSON format (no markdown, pure JSON):
   "missing_formats": ["format1", "format2", "format3"]
 }}
 
-Make 5 recommendations. Score companies out of 10. Be concise."""
-    
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    response = client.models.generate_content(
-    model="models/gemini-1.5-flash-8b",
-    contents=prompt
-)
+Rules:
+- Make 5 recommendations
+- Score companies out of 10
+- Keep it concise
+- No markdown
+"""
 
-    try:
-        text = response.text.strip()
-        # Remove markdown code blocks if present
-        text = re.sub(r'^```json\s*', '', text)
-        text = re.sub(r'\s*```$', '', text)
-        return json.loads(text)
-    except:
-        return {
-            "executive_summary": "Analysis complete. See detailed metrics below.",
-            "leader": all_data[0]["company"] if all_data else company_name,
-            "leader_reason": "Based on subscriber count and engagement metrics.",
-            "content_themes": {},
-            "content_gaps": ["Short-form content", "Behind the scenes", "Customer stories", "Live streams"],
-            "posting_insight": "Consistent posting drives better channel growth.",
-            "engagement_insight": "Higher engagement correlates with educational content.",
-            "recommendations": [
-                {"title": "Increase posting frequency", "detail": "Post at least 2x per week to grow faster."},
-                {"title": "Add shorts", "detail": "YouTube Shorts drive discovery."},
-                {"title": "Customer case studies", "detail": "Real customer stories perform well."},
-                {"title": "Improve thumbnails", "detail": "A/B test thumbnail designs."},
-                {"title": "Engage in comments", "detail": "Reply to comments to boost engagement signals."}
-            ],
-            "company_scores": {},
-            "rankings": [d["company"] for d in all_data if "error" not in d],
-            "missing_formats": ["Shorts", "Live streams", "Webinars"]
-        }
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    candidate_models = [
+        GEMINI_MODEL,
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash"
+    ]
+
+    last_error = None
+
+    for model_name in candidate_models:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
+            text = (response.text or "").strip()
+            return extract_json_from_text(text)
+        except Exception as e:
+            last_error = e
+            continue
+
+    # Fallback if Gemini fails
+    print("Gemini error:", last_error)
+    fallback_rankings = [d["company"] for d in all_data if "error" not in d]
+
+    return {
+        "executive_summary": "AI analysis unavailable. The report below is based on the raw metrics collected from YouTube.",
+        "leader": all_data[0]["company"] if all_data else company_name,
+        "leader_reason": "Fallback analysis used because Gemini could not generate a response.",
+        "content_themes": {},
+        "content_gaps": [
+            "Short-form content",
+            "Behind-the-scenes content",
+            "Customer stories",
+            "Live streams"
+        ],
+        "posting_insight": "Consistent posting usually improves visibility and audience recall.",
+        "engagement_insight": "Educational and practical videos often receive stronger engagement.",
+        "recommendations": [
+            {
+                "title": "Increase posting frequency",
+                "detail": "Publish at least 2 times per week to stay visible and build consistency."
+            },
+            {
+                "title": "Add Shorts",
+                "detail": "Use YouTube Shorts to improve discovery and attract new viewers."
+            },
+            {
+                "title": "Publish case studies",
+                "detail": "Customer stories build trust and often perform well with B2B audiences."
+            },
+            {
+                "title": "Improve thumbnails",
+                "detail": "Test thumbnail styles to improve click-through rate."
+            },
+            {
+                "title": "Engage in comments",
+                "detail": "Reply to viewers to strengthen community signals and engagement."
+            }
+        ],
+        "company_scores": {},
+        "rankings": fallback_rankings,
+        "missing_formats": ["Shorts", "Live streams", "Webinars"]
+    }
+
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    data = request.json
+    data = request.json or {}
     company = data.get("company", "").strip()
     competitors = [c.strip() for c in data.get("competitors", []) if c.strip()]
 
@@ -297,7 +412,19 @@ def analyze():
     try:
         ai_insights = generate_ai_analysis(all_data, company)
     except Exception as e:
-        ai_insights = {"executive_summary": f"AI analysis unavailable: {str(e)}"}
+        ai_insights = {
+            "executive_summary": f"AI analysis unavailable: {str(e)}",
+            "leader": company,
+            "leader_reason": "Fallback analysis used.",
+            "content_themes": {},
+            "content_gaps": [],
+            "posting_insight": "",
+            "engagement_insight": "",
+            "recommendations": [],
+            "company_scores": {},
+            "rankings": [d["company"] for d in all_data if "error" not in d],
+            "missing_formats": []
+        }
 
     return jsonify({
         "companies": all_data,
@@ -305,9 +432,10 @@ def analyze():
         "main_company": company
     })
 
+
 @app.route("/download", methods=["POST"])
 def download():
-    data = request.json
+    data = request.json or {}
     report_data = data.get("report_data")
 
     if not report_data:
@@ -315,7 +443,10 @@ def download():
 
     try:
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pptx")
+        tmp.close()
+
         build_pptx(report_data, tmp.name)
+
         return send_file(
             tmp.name,
             as_attachment=True,
@@ -324,6 +455,7 @@ def download():
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
