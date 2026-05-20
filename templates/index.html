@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Video Competitor Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0d0f1a;
+    --bg2: #12162a;
+    --card: #171b2e;
+    --card2: #1e2440;
+    --accent: #4f8eff;
+    --teal: #00e5b8;
+    --coral: #ff6b6b;
+    --amber: #ffc15e;
+    --white: #f0f2ff;
+    --gray: #6b728a;
+    --gray2: #8a8fa8;
+    --border: #262d4a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 60px 60px;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+  /* Header */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+    position: sticky; top: 0;
+    background: rgba(13,15,26,0.92);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+  .header-inner { display: flex; align-items: center; gap: 16px; }
+  .logo {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700; color: white;
+  }
+  .brand { font-size: 15px; font-weight: 600; letter-spacing: 0.5px; }
+  .brand span { color: var(--accent); }
+  .badge {
+    margin-left: auto;
+    background: rgba(79,142,255,0.12);
+    border: 1px solid rgba(79,142,255,0.3);
+    color: var(--accent);
+    font-size: 11px; font-weight: 600;
+    padding: 4px 10px; border-radius: 20px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Hero */
+  .hero { padding: 64px 0 48px; text-align: center; }
+  .hero-tag {
+    display: inline-block;
+    background: rgba(0,229,184,0.08);
+    border: 1px solid rgba(0,229,184,0.25);
+    color: var(--teal);
+    font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
+    padding: 6px 14px; border-radius: 20px; margin-bottom: 24px;
+  }
+  h1 { font-size: clamp(28px, 5vw, 52px); font-weight: 700; line-height: 1.15; margin-bottom: 16px; }
+  h1 span { color: var(--accent); }
+  .hero-sub { font-size: 16px; color: var(--gray2); max-width: 540px; margin: 0 auto 48px; line-height: 1.7; }
+
+  /* Form Card */
+  .form-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px;
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  .form-row { display: grid; gap: 16px; margin-bottom: 20px; }
+  .form-row.two { grid-template-columns: 1fr 1fr; }
+  .field label {
+    display: block; font-size: 11px; font-weight: 600;
+    letter-spacing: 1px; text-transform: uppercase;
+    color: var(--gray2); margin-bottom: 8px;
+  }
+  .field input {
+    width: 100%;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--white);
+    font-family: inherit; font-size: 14px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .field input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(79,142,255,0.12);
+  }
+  .field input::placeholder { color: var(--gray); }
+  .field.main input {
+    font-size: 16px; font-weight: 600;
+    border-color: rgba(79,142,255,0.4);
+    padding: 14px 18px;
+  }
+
+  .form-divider {
+    display: flex; align-items: center; gap: 12px;
+    margin: 8px 0 20px; color: var(--gray); font-size: 12px; font-weight: 500;
+  }
+  .form-divider::before, .form-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  .btn {
+    width: 100%; padding: 16px;
+    background: var(--accent);
+    color: white; font-family: inherit;
+    font-size: 15px; font-weight: 600;
+    border: none; border-radius: 10px;
+    cursor: pointer; letter-spacing: 0.3px;
+    transition: all 0.2s;
+    position: relative; overflow: hidden;
+  }
+  .btn:hover { background: #6ba3ff; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(79,142,255,0.3); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* Progress */
+  #progress-section { display: none; padding: 48px 0; }
+  .progress-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px;
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .progress-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+  .progress-sub { color: var(--gray2); font-size: 14px; margin-bottom: 28px; }
+  .progress-bar-wrap {
+    background: var(--bg2);
+    border-radius: 100px;
+    height: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--teal));
+    border-radius: 100px;
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+  .progress-steps { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+  .step-item {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: var(--gray); text-align: left;
+  }
+  .step-item.active { color: var(--white); }
+  .step-item.done { color: var(--teal); }
+  .step-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--border); flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .step-item.active .step-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .step-item.done .step-dot { background: var(--teal); }
+
+  /* Results */
+  #results-section { display: none; padding: 48px 0; }
+  .results-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 32px; flex-wrap: wrap; gap: 12px;
+  }
+  .results-title { font-size: 26px; font-weight: 700; }
+  .results-title span { color: var(--accent); }
+  .download-btn {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--teal); color: #0a1a15;
+    font-family: inherit; font-size: 14px; font-weight: 700;
+    padding: 12px 22px; border-radius: 10px; border: none;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .download-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+  /* Section headings */
+  .section-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--gray); margin-bottom: 4px;
+  }
+  .section-title { font-size: 20px; font-weight: 700; margin-bottom: 20px; }
+
+  /* Company grid */
+  .company-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 40px; }
+  .company-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .company-card:hover { transform: translateY(-2px); }
+  .company-card .accent-line { position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+  .company-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; letter-spacing: 0.3px; }
+  .channel-name { font-size: 11px; color: var(--gray); margin-bottom: 16px; }
+  .stat-row { display: flex; flex-direction: column; gap: 10px; }
+  .stat { display: flex; justify-content: space-between; align-items: center; }
+  .stat-label { font-size: 11px; color: var(--gray); }
+  .stat-value { font-size: 14px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+
+  /* Insight box */
+  .insight-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--teal);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 32px;
+  }
+  .insight-box .itag { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--teal); margin-bottom: 8px; }
+  .insight-text { font-size: 14px; line-height: 1.7; color: var(--white); }
+
+  /* Tables */
+  .data-table { width: 100%; border-collapse: collapse; margin-bottom: 32px; }
+  .data-table th {
+    background: var(--card2); text-align: left;
+    font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--gray); padding: 12px 14px;
+  }
+  .data-table td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .data-table td:first-child { font-weight: 600; }
+
+  /* Video list */
+  .video-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 32px; }
+  .video-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  }
+  .video-title { font-size: 13px; font-weight: 500; line-height: 1.5; flex: 1; }
+  .video-stats { display: flex; gap: 16px; flex-shrink: 0; }
+  .vstat { font-size: 12px; font-family: 'JetBrains Mono', monospace; color: var(--gray2); }
+  .vstat span { color: var(--white); font-weight: 600; }
+
+  /* Rec cards */
+  .rec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .rec-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+  }
+  .rec-num { font-size: 32px; font-weight: 700; color: var(--border); position: absolute; top: 16px; right: 20px; font-family: 'JetBrains Mono', monospace; }
+  .rec-title { font-size: 14px; font-weight: 700; margin-bottom: 8px; color: var(--accent); }
+  .rec-detail { font-size: 13px; line-height: 1.6; color: var(--gray2); }
+
+  /* Gap pills */
+  .pill-group { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  .pill {
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 12px; font-weight: 500;
+    background: rgba(79,142,255,0.1); border: 1px solid rgba(79,142,255,0.25);
+    color: var(--accent);
+  }
+  .pill.teal { background: rgba(0,229,184,0.1); border-color: rgba(0,229,184,0.25); color: var(--teal); }
+  .pill.coral { background: rgba(255,107,107,0.1); border-color: rgba(255,107,107,0.25); color: var(--coral); }
+
+  /* Scores table */
+  .score-bar { background: var(--bg2); border-radius: 4px; height: 6px; margin-top: 4px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 4px; background: var(--accent); }
+
+  /* Error */
+  .error-box {
+    background: rgba(255,107,107,0.08); border: 1px solid rgba(255,107,107,0.3);
+    border-radius: 10px; padding: 16px 20px; color: var(--coral);
+    font-size: 13px; margin-bottom: 20px; display: none;
+  }
+
+  /* Tab nav */
+  .tab-nav { display: flex; gap: 4px; margin-bottom: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 4px; width: fit-content; }
+  .tab-btn {
+    padding: 8px 18px; border-radius: 7px; border: none;
+    background: transparent; color: var(--gray);
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .tab-btn.active { background: var(--accent); color: white; }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  @media (max-width: 600px) {
+    .form-row.two { grid-template-columns: 1fr; }
+    .results-header { flex-direction: column; align-items: flex-start; }
+    .video-item { flex-direction: column; }
+    .video-stats { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="container">
+    <div class="header-inner">
+      <div class="logo">V</div>
+      <div class="brand">Video<span>Intel</span></div>
+      <span class="badge">POWERED BY YOUTUBE API + GEMINI AI</span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-tag">Competitor Intelligence Tool</div>
+    <h1>Decode Your Competitors'<br/><span>Video Strategy</span></h1>
+    <p class="hero-sub">Enter your company and up to 4 competitors. Get a full YouTube analysis with downloadable PowerPoint report.</p>
+  </section>
+
+  <!-- Form -->
+  <section id="form-section">
+    <div class="form-card">
+      <div id="error-box" class="error-box"></div>
+
+      <div class="form-row">
+        <div class="field main">
+          <label>Your Company</label>
+          <input id="company" type="text" placeholder="e.g. HubSpot" autocomplete="off"/>
+        </div>
+      </div>
+
+      <div class="form-divider">Competitors (up to 4)</div>
+
+      <div class="form-row two">
+        <div class="field"><label>Competitor 1</label><input class="comp" type="text" placeholder="e.g. Salesforce"/></div>
+        <div class="field"><label>Competitor 2</label><input class="comp" type="text" placeholder="e.g. Zendesk"/></div>
+      </div>
+      <div class="form-row two">
+        <div class="field"><label>Competitor 3</label><input class="comp" type="text" placeholder="e.g. Intercom"/></div>
+        <div class="field"><label>Competitor 4</label><input class="comp" type="text" placeholder="e.g. Freshworks"/></div>
+      </div>
+
+      <button class="btn" id="analyze-btn" onclick="runAnalysis()">
+        ⚡ &nbsp; Generate Intelligence Report
+      </button>
+    </div>
+  </section>
+
+  <!-- Progress -->
+  <section id="progress-section">
+    <div class="progress-card">
+      <div class="progress-title">Analyzing Video Strategy</div>
+      <div class="progress-sub" id="progress-label">Fetching YouTube data...</div>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+      <div class="progress-steps" id="progress-steps"></div>
+    </div>
+  </section>
+
+  <!-- Results -->
+  <section id="results-section">
+    <div class="results-header">
+      <div>
+        <div class="section-label">Analysis Complete</div>
+        <div class="results-title">Video Intelligence Report — <span id="result-company"></span></div>
+      </div>
+      <button class="download-btn" onclick="downloadReport()">
+        ⬇ &nbsp; Download PowerPoint
+      </button>
+    </div>
+
+    <!-- Tab Nav -->
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
+      <button class="tab-btn" onclick="showTab('videos')">Top Videos</button>
+      <button class="tab-btn" onclick="showTab('gaps')">Gaps & Themes</button>
+      <button class="tab-btn" onclick="showTab('recs')">Recommendations</button>
+      <button class="tab-btn" onclick="showTab('scores')">Scores</button>
+    </div>
+
+    <!-- Tab: Overview -->
+    <div class="tab-panel active" id="tab-overview">
+      <div class="insight-box">
+        <div class="itag">Executive Summary</div>
+        <div class="insight-text" id="exec-summary"></div>
+      </div>
+      <div class="section-label">Channel Metrics</div>
+      <div class="section-title">All Companies at a Glance</div>
+      <div class="company-grid" id="company-grid"></div>
+
+      <div class="section-label">Channel Comparison</div>
+      <div class="section-title">Side-by-Side Data</div>
+      <table class="data-table" id="overview-table"></table>
+    </div>
+
+    <!-- Tab: Videos -->
+    <div class="tab-panel" id="tab-videos">
+      <div id="videos-content"></div>
+    </div>
+
+    <!-- Tab: Gaps & Themes -->
+    <div class="tab-panel" id="tab-gaps">
+      <div class="section-title">Content Gaps — Topics Nobody Is Covering</div>
+      <div class="pill-group" id="gaps-list"></div>
+      <div class="section-title">Missing Video Formats</div>
+      <div class="pill-group" id="formats-list"></div>
+      <div class="section-title" style="margin-top:24px">Content Themes by Company</div>
+      <div id="themes-content"></div>
+      <div class="insight-box" style="margin-top:24px">
+        <div class="itag">Posting Insight</div>
+        <div class="insight-text" id="posting-insight"></div>
+      </div>
+    </div>
+
+    <!-- Tab: Recommendations -->
+    <div class="tab-panel" id="tab-recs">
+      <div class="section-title">Actionable Recommendations</div>
+      <div class="rec-grid" id="recs-grid"></div>
+    </div>
+
+    <!-- Tab: Scores -->
+    <div class="tab-panel" id="tab-scores">
+      <div class="section-title">Company Scorecard</div>
+      <table class="data-table" id="scores-table"></table>
+    </div>
+  </section>
+</main>
+
+<script>
+const COLORS = ['#4f8eff','#00e5b8','#ff6b6b','#ffc15e','#a06cff'];
+let reportData = null;
+
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function fmt(n) {
+  if (!n || isNaN(n)) return '—';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = label;
+}
+
+function updateStep(steps, activeIdx) {
+  const el = document.getElementById('progress-steps');
+  el.innerHTML = steps.map((s, i) => {
+    const cls = i < activeIdx ? 'done' : i === activeIdx ? 'active' : '';
+    return `<div class="step-item ${cls}"><div class="step-dot"></div>${s}</div>`;
+  }).join('');
+}
+
+async function runAnalysis() {
+  const company = document.getElementById('company').value.trim();
+  if (!company) {
+    const eb = document.getElementById('error-box');
+    eb.textContent = 'Please enter your company name.';
+    eb.style.display = 'block';
+    return;
+  }
+  document.getElementById('error-box').style.display = 'none';
+
+  const competitors = Array.from(document.querySelectorAll('.comp')).map(i => i.value.trim()).filter(Boolean);
+
+  document.getElementById('analyze-btn').disabled = true;
+  document.getElementById('form-section').style.display = 'none';
+  document.getElementById('results-section').style.display = 'none';
+  document.getElementById('progress-section').style.display = 'block';
+
+  const steps = [
+    'Searching YouTube channels...',
+    'Fetching channel statistics...',
+    'Analysing recent videos...',
+    'Running AI analysis with Gemini...',
+    'Building your report...'
+  ];
+
+  let step = 0;
+  const ticker = setInterval(() => {
+    if (step < steps.length - 1) {
+      step++;
+      setProgress(step * 18, steps[step]);
+      updateStep(steps, step);
+    }
+  }, 3000);
+  updateStep(steps, 0);
+  setProgress(5, steps[0]);
+
+  try {
+    const resp = await fetch('/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company, competitors })
+    });
+    const data = await resp.json();
+    clearInterval(ticker);
+
+    if (data.error) throw new Error(data.error);
+
+    setProgress(100, 'Report ready!');
+    updateStep(steps, steps.length);
+    await new Promise(r => setTimeout(r, 700));
+
+    reportData = data;
+    renderResults(data);
+    document.getElementById('progress-section').style.display = 'none';
+    document.getElementById('results-section').style.display = 'block';
+  } catch (err) {
+    clearInterval(ticker);
+    document.getElementById('progress-section').style.display = 'none';
+    document.getElementById('form-section').style.display = 'block';
+    const eb = document.getElementById('error-box');
+    eb.textContent = 'Error: ' + err.message;
+    eb.style.display = 'block';
+    document.getElementById('analyze-btn').disabled = false;
+  }
+}
+
+function renderResults(data) {
+  const companies = (data.companies || []).filter(c => !c.error);
+  const insights = data.insights || {};
+
+  document.getElementById('result-company').textContent = data.main_company;
+  document.getElementById('exec-summary').textContent = insights.executive_summary || '';
+  document.getElementById('posting-insight').textContent = insights.posting_insight || '';
+
+  // Company cards
+  const grid = document.getElementById('company-grid');
+  grid.innerHTML = companies.map((c, i) => `
+    <div class="company-card" style="border-color:${COLORS[i]}22">
+      <div class="accent-line" style="background:${COLORS[i]}"></div>
+      <div class="company-name" style="color:${COLORS[i]}">${c.company}</div>
+      <div class="channel-name">${c.channel_name || ''}</div>
+      <div class="stat-row">
+        <div class="stat"><span class="stat-label">Subscribers</span><span class="stat-value" style="color:${COLORS[i]}">${fmt(c.subscribers)}</span></div>
+        <div class="stat"><span class="stat-label">Total Videos</span><span class="stat-value">${fmt(c.total_videos)}</span></div>
+        <div class="stat"><span class="stat-label">Avg Views</span><span class="stat-value">${fmt(c.avg_views)}</span></div>
+        <div class="stat"><span class="stat-label">Engagement</span><span class="stat-value">${c.avg_engagement}%</span></div>
+        <div class="stat"><span class="stat-label">Posting</span><span class="stat-value" style="font-family:inherit;font-size:11px">${c.posting_frequency || '—'}</span></div>
+      </div>
+    </div>
+  `).join('');
+
+  // Overview table
+  const ot = document.getElementById('overview-table');
+  ot.innerHTML = `<thead><tr><th>Company</th><th>Subscribers</th><th>Total Videos</th><th>Avg Views</th><th>Avg Likes</th><th>Avg Comments</th><th>Engagement</th><th>Country</th></tr></thead>
+  <tbody>${companies.map((c,i) => `<tr>
+    <td style="color:${COLORS[i]}">${c.company}</td>
+    <td>${fmt(c.subscribers)}</td><td>${fmt(c.total_videos)}</td>
+    <td>${fmt(c.avg_views)}</td><td>${fmt(c.avg_likes)}</td><td>${fmt(c.avg_comments)}</td>
+    <td>${c.avg_engagement}%</td><td>${c.country||'—'}</td>
+  </tr>`).join('')}</tbody>`;
+
+  // Videos tab
+  const vc = document.getElementById('videos-content');
+  vc.innerHTML = companies.map((c, i) => `
+    <div style="margin-bottom:32px">
+      <div class="section-label" style="color:${COLORS[i]}">${c.company}</div>
+      <div class="section-title">Top Videos by Views</div>
+      <div class="video-list">
+        ${(c.top_videos||[]).slice(0,5).map(v => `
+          <div class="video-item">
+            <div class="video-title">${v.title}</div>
+            <div class="video-stats">
+              <div class="vstat">👁 <span>${fmt(v.views)}</span></div>
+              <div class="vstat">👍 <span>${fmt(v.likes)}</span></div>
+              <div class="vstat">💬 <span>${fmt(v.comments)}</span></div>
+              <div class="vstat">📊 <span>${v.engagement_rate}%</span></div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  // Gaps
+  const gaps = insights.content_gaps || [];
+  document.getElementById('gaps-list').innerHTML = gaps.map(g => `<span class="pill coral">${g}</span>`).join('');
+  const fmts = insights.missing_formats || [];
+  document.getElementById('formats-list').innerHTML = fmts.map(f => `<span class="pill teal">${f}</span>`).join('');
+
+  // Themes
+  const themes = insights.content_themes || {};
+  const tc = document.getElementById('themes-content');
+  tc.innerHTML = companies.map((c, i) => {
+    const t = themes[c.company] || c.top_topics || [];
+    return `<div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:${COLORS[i]};margin-bottom:8px">${c.company}</div>
+      <div class="pill-group">${t.map(x => `<span class="pill">${x}</span>`).join('')}</div>
+    </div>`;
+  }).join('');
+
+  // Recommendations
+  const recs = insights.recommendations || [];
+  document.getElementById('recs-grid').innerHTML = recs.map((r, i) => `
+    <div class="rec-card" style="border-color:${COLORS[i%COLORS.length]}33">
+      <div class="rec-num">0${i+1}</div>
+      <div class="rec-title">${r.title}</div>
+      <div class="rec-detail">${r.detail}</div>
+    </div>
+  `).join('');
+
+  // Scores
+  const scores = insights.company_scores || {};
+  const scoreKeys = ['content_quality','consistency','engagement','growth_potential','overall'];
+  const st = document.getElementById('scores-table');
+  st.innerHTML = `<thead><tr><th>Company</th><th>Content Quality</th><th>Consistency</th><th>Engagement</th><th>Growth Potential</th><th>Overall</th></tr></thead>
+  <tbody>${companies.map((c,i) => {
+    const s = scores[c.company] || {};
+    return `<tr><td style="color:${COLORS[i]}">${c.company}</td>${scoreKeys.map(k => `
+      <td><div style="font-weight:700;margin-bottom:4px">${s[k]||'—'}/10</div>
+      <div class="score-bar"><div class="score-fill" style="width:${(s[k]||0)*10}%;background:${COLORS[i]}"></div></div></td>
+    `).join('')}</tr>`;
+  }).join('')}</tbody>`;
+}
+
+async function downloadReport() {
+  if (!reportData) return;
+  const btn = document.querySelector('.download-btn');
+  btn.textContent = '⏳  Generating PowerPoint...';
+  btn.disabled = true;
+  try {
+    const resp = await fetch('/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ report_data: reportData })
+    });
+    if (!resp.ok) throw new Error('Download failed');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'video_competitor_report.pptx';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Download error: ' + e.message);
+  }
+  btn.textContent = '⬇  Download PowerPoint';
+  btn.disabled = false;
+}
+</script>
+</body>
+</html>

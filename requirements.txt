@@ -1,0 +1,10 @@
+flask
+flask-cors
+google-api-python-client
+google-generativeai
+python-pptx
+requests
+python-dotenv
+matplotlib
+pillow
+gunicorn
