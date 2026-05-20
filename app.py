@@ -21,6 +21,8 @@ YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
+USE_GEMINI = os.getenv("USE_GEMINI", "0") == "1"
+
 if not YOUTUBE_API_KEY:
     raise ValueError("Missing YOUTUBE_API_KEY in .env")
 if not GEMINI_API_KEY:
@@ -255,10 +257,32 @@ def extract_json_from_text(text):
 
 
 def generate_ai_analysis(all_data, company_name):
-    """Use Gemini to generate deep insights."""
+    """Generate deep insights. Gemini is optional; fallback is always available."""
 
-    print("Gemini key present:", bool(GEMINI_API_KEY))
-    print("Gemini model:", GEMINI_MODEL)
+    def fallback_analysis(error_text="Fallback used"):
+        fallback_rankings = [d["company"] for d in all_data if "error" not in d]
+        return {
+            "executive_summary": f"AI analysis unavailable: {error_text}. The report below is based on the raw metrics collected from YouTube.",
+            "leader": all_data[0]["company"] if all_data else company_name,
+            "leader_reason": "Fallback analysis used because Gemini was disabled or unavailable.",
+            "content_themes": {},
+            "content_gaps": ["Short-form content", "Behind the scenes", "Customer stories", "Live streams"],
+            "posting_insight": "Consistent posting usually improves visibility and audience recall.",
+            "engagement_insight": "Educational and practical videos often receive stronger engagement.",
+            "recommendations": [
+                {"title": "Increase posting frequency", "detail": "Publish at least 2 times per week to stay visible and build consistency."},
+                {"title": "Add Shorts", "detail": "Use YouTube Shorts to improve discovery and attract new viewers."},
+                {"title": "Publish case studies", "detail": "Customer stories build trust and often perform well with B2B audiences."},
+                {"title": "Improve thumbnails", "detail": "Test thumbnail styles to improve click-through rate."},
+                {"title": "Engage in comments", "detail": "Reply to viewers to strengthen community signals and engagement."}
+            ],
+            "company_scores": {},
+            "rankings": fallback_rankings,
+            "missing_formats": ["Shorts", "Live streams", "Webinars"]
+        }
+
+    if not USE_GEMINI:
+        return fallback_analysis("Gemini disabled")
 
     summary_data = []
     for d in all_data:
@@ -320,147 +344,39 @@ Rules:
 - No markdown
 """
 
-    # Build schema dynamically without additionalProperties
-    theme_properties = {}
-    score_properties = {}
-
-    for item in summary_data:
-        company_key = item["company"]
-
-        theme_properties[company_key] = {
-            "type": "array",
-            "items": {"type": "string"}
-        }
-
-        score_properties[company_key] = {
-            "type": "object",
-            "properties": {
-                "content_quality": {"type": "number"},
-                "consistency": {"type": "number"},
-                "engagement": {"type": "number"},
-                "growth_potential": {"type": "number"},
-                "overall": {"type": "number"}
-            },
-            "required": [
-                "content_quality",
-                "consistency",
-                "engagement",
-                "growth_potential",
-                "overall"
-            ]
-        }
-
-    response_schema = {
-        "type": "object",
-        "properties": {
-            "executive_summary": {"type": "string"},
-            "leader": {"type": "string"},
-            "leader_reason": {"type": "string"},
-            "content_themes": {
-                "type": "object",
-                "properties": theme_properties
-            },
-            "content_gaps": {
-                "type": "array",
-                "items": {"type": "string"}
-            },
-            "posting_insight": {"type": "string"},
-            "engagement_insight": {"type": "string"},
-            "recommendations": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "detail": {"type": "string"}
-                    },
-                    "required": ["title", "detail"]
-                }
-            },
-            "company_scores": {
-                "type": "object",
-                "properties": score_properties
-            },
-            "rankings": {
-                "type": "array",
-                "items": {"type": "string"}
-            },
-            "missing_formats": {
-                "type": "array",
-                "items": {"type": "string"}
-            }
-        },
-        "required": [
-            "executive_summary",
-            "leader",
-            "leader_reason",
-            "content_themes",
-            "content_gaps",
-            "posting_insight",
-            "engagement_insight",
-            "recommendations",
-            "company_scores",
-            "rankings",
-            "missing_formats"
-        ]
-    }
-
     client = genai.Client(api_key=GEMINI_API_KEY)
 
-    candidate_models = [
-        GEMINI_MODEL,
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite"
-    ]
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config={
+                "response_mime_type": "application/json",
+                "temperature": 0.2,
+                "max_output_tokens": 2048,
+            }
+        )
 
-    last_error = None
+        text = (response.text or "").strip()
+        text = re.sub(r"^```json\s*", "", text)
+        text = re.sub(r"^```\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
 
-    for model_name in candidate_models:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config={
-                    "response_mime_type": "application/json",
-                    "response_schema": response_schema,
-                    "temperature": 0.2,
-                    "max_output_tokens": 2048,
-                }
-            )
+        data = json.loads(text)
 
-            text = (response.text or "").strip()
-            if not text:
-                raise ValueError("Gemini returned empty text")
+        # Fill missing keys safely
+        data.setdefault("content_themes", {})
+        data.setdefault("content_gaps", [])
+        data.setdefault("recommendations", [])
+        data.setdefault("company_scores", {})
+        data.setdefault("rankings", [])
+        data.setdefault("missing_formats", [])
 
-            text = re.sub(r"^```json\s*", "", text)
-            text = re.sub(r"^```\s*", "", text)
-            text = re.sub(r"\s*```$", "", text)
+        return data
 
-            return json.loads(text)
-
-        except Exception as e:
-            last_error = e
-            print(f"Gemini failed with model {model_name}: {e}")
-
-    return {
-        "executive_summary": f"AI analysis unavailable: {last_error}",
-        "leader": all_data[0]["company"] if all_data else company_name,
-        "leader_reason": "Fallback analysis used because Gemini could not generate a valid response.",
-        "content_themes": {},
-        "content_gaps": ["Short-form content", "Behind the scenes", "Customer stories", "Live streams"],
-        "posting_insight": "Consistent posting drives better channel visibility.",
-        "engagement_insight": "Educational content often performs well in B2B video marketing.",
-        "recommendations": [
-            {"title": "Increase posting frequency", "detail": "Post at least 2x per week to grow faster."},
-            {"title": "Add Shorts", "detail": "YouTube Shorts drive discovery."},
-            {"title": "Customer case studies", "detail": "Real customer stories often perform well."},
-            {"title": "Improve thumbnails", "detail": "A/B test thumbnail designs."},
-            {"title": "Engage in comments", "detail": "Reply to comments to boost engagement signals."}
-        ],
-        "company_scores": {},
-        "rankings": [d["company"] for d in all_data if "error" not in d],
-        "missing_formats": ["Shorts", "Live streams", "Webinars"]
-    }
+    except Exception as e:
+        print("Gemini error:", e)
+        return fallback_analysis(str(e))
 
 
 @app.route("/")
