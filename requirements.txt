@@ -1,7 +1,7 @@
 flask
 flask-cors
 google-api-python-client
-google-generativeai
+google-genai
 python-pptx
 requests
 python-dotenv
