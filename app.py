@@ -240,7 +240,7 @@ Make 5 recommendations. Score companies out of 10. Be concise."""
     
     client = genai.Client(api_key=GEMINI_API_KEY)
     response = client.models.generate_content(
-    model="gemini-1.5-flash-8b",
+    model="models/gemini-1.5-flash-8b",
     contents=prompt
 )
 
